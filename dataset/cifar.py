@@ -22,7 +22,7 @@ def get_cifar10(args, root):
     transform_labeled = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(size=32,
-                              padding=int(32*0.125),
+                              padding=int(32 * 0.125),
                               padding_mode='reflect'),
         transforms.ToTensor(),
         transforms.Normalize(mean=cifar10_mean, std=cifar10_std)
@@ -51,11 +51,10 @@ def get_cifar10(args, root):
 
 
 def get_cifar100(args, root):
-
     transform_labeled = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(size=32,
-                              padding=int(32*0.125),
+                              padding=int(32 * 0.125),
                               padding_mode='reflect'),
         transforms.ToTensor(),
         transforms.Normalize(mean=cifar100_mean, std=cifar100_std)])
@@ -84,6 +83,7 @@ def get_cifar100(args, root):
     return train_labeled_dataset, train_unlabeled_dataset, test_dataset
 
 
+
 def x_u_split(args, labels):
     label_per_class = args.num_labeled // args.num_classes
     labels = np.array(labels)
@@ -110,12 +110,12 @@ class TransformFixMatch(object):
         self.weak = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(size=32,
-                                  padding=int(32*0.125),
+                                  padding=int(32 * 0.125),
                                   padding_mode='reflect')])
         self.strong = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(size=32,
-                                  padding=int(32*0.125),
+                                  padding=int(32 * 0.125),
                                   padding_mode='reflect'),
             RandAugmentMC(n=2, m=10)])
         self.normalize = transforms.Compose([

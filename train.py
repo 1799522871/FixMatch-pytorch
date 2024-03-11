@@ -17,6 +17,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+from dataset.UCM import get_UCM
 from dataset.cifar import DATASET_GETTERS
 from utils import AverageMeter, accuracy
 
@@ -69,26 +70,26 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch FixMatch Training')
     parser.add_argument('--gpu-id', default='0', type=int,
                         help='id(s) for CUDA_VISIBLE_DEVICES')
-    parser.add_argument('--num-workers', type=int, default=4,
-                        help='number of workers')
-    parser.add_argument('--dataset', default='cifar10', type=str,
+    parser.add_argument('--num-workers', type=int, default=1,
+                        help='number of workers') # 原
+    parser.add_argument('--dataset', default='UCM', type=str,
                         choices=['cifar10', 'cifar100'],
-                        help='dataset name')
-    parser.add_argument('--num-labeled', type=int, default=4000,
-                        help='number of labeled data')
+                        help='dataset name')  # 原 cifar10
+    parser.add_argument('--num-labeled', type=int, default=504,
+                        help='number of labeled data')  # 原4000
     parser.add_argument("--expand-labels", action="store_true",
                         help="expand labels to fit eval steps")
     parser.add_argument('--arch', default='wideresnet', type=str,
                         choices=['wideresnet', 'resnext'],
                         help='dataset name')
-    parser.add_argument('--total-steps', default=2**20, type=int,
-                        help='number of total steps to run')
-    parser.add_argument('--eval-step', default=1024, type=int,
-                        help='number of eval steps to run')
+    parser.add_argument('--total-steps', default=2**18, type=int,
+                        help='number of total steps to run')  # 默认 2**20
+    parser.add_argument('--eval-step', default=2**9, type=int,
+                        help='number of eval steps to run') # 默认 2**10
     parser.add_argument('--start-epoch', default=0, type=int,
                         help='manual epoch number (useful on restarts)')
-    parser.add_argument('--batch-size', default=64, type=int,
-                        help='train batchsize')
+    parser.add_argument('--batch-size', default=2, type=int,
+                        help='train batchsize') # 原 64
     parser.add_argument('--lr', '--learning-rate', default=0.03, type=float,
                         help='initial learning rate')
     parser.add_argument('--warmup', default=0, type=float,
@@ -108,7 +109,7 @@ def main():
     parser.add_argument('--T', default=1, type=float,
                         help='pseudo label temperature')
     parser.add_argument('--threshold', default=0.95, type=float,
-                        help='pseudo label threshold')
+                        help='pseudo label threshold') # 阈值0.95
     parser.add_argument('--out', default='result',
                         help='directory to output the result')
     parser.add_argument('--resume', default='', type=str,
@@ -199,11 +200,24 @@ def main():
             args.model_depth = 29
             args.model_width = 64
 
+    # 自己添加
+    elif args.dataset == 'UCM':
+        args.num_classes = 21
+        if args.arch == 'wideresnet':
+            args.model_depth = 28
+            args.model_width = 2  # 第一次是2
+        elif args.arch == 'resnext':
+            args.model_cardinality = 8
+            args.model_depth = 28
+            args.model_width = 16
+
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()
 
-    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS[args.dataset](
-        args, './data')
+    # labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS[args.dataset](
+    #     args, './data')
+    labeled_dataset, unlabeled_dataset, test_dataset = get_UCM(
+        args=args,root='C:\\Users\\hyq\\Desktop\\kk\FixMatch-pytorch\\data\\UCM_split\\train',test_dir='C:\\Users\\hyq\\Desktop\\kk\\FixMatch-pytorch\\data\\UCM_split\\test')
 
     if args.local_rank == 0:
         torch.distributed.barrier()
@@ -327,30 +341,30 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
                          disable=args.local_rank not in [-1, 0])
         for batch_idx in range(args.eval_step):
             try:
-                inputs_x, targets_x = labeled_iter.next()
+                # inputs_x, targets_x = labeled_iter.next()
                 # error occurs ↓
-                # inputs_x, targets_x = next(labeled_iter)
+                inputs_x, targets_x = next(labeled_iter)
             except:
                 if args.world_size > 1:
                     labeled_epoch += 1
                     labeled_trainloader.sampler.set_epoch(labeled_epoch)
                 labeled_iter = iter(labeled_trainloader)
-                inputs_x, targets_x = labeled_iter.next()
+                # inputs_x, targets_x = labeled_iter.next()
                 # error occurs ↓
-                # inputs_x, targets_x = next(labeled_iter)
+                inputs_x, targets_x = next(labeled_iter)
 
             try:
-                (inputs_u_w, inputs_u_s), _ = unlabeled_iter.next()
+                # (inputs_u_w, inputs_u_s), _ = unlabeled_iter.next()
                 # error occurs ↓
-                # (inputs_u_w, inputs_u_s), _ = next(unlabeled_iter)
+                (inputs_u_w, inputs_u_s), _ = next(unlabeled_iter)
             except:
                 if args.world_size > 1:
                     unlabeled_epoch += 1
                     unlabeled_trainloader.sampler.set_epoch(unlabeled_epoch)
                 unlabeled_iter = iter(unlabeled_trainloader)
-                (inputs_u_w, inputs_u_s), _ = unlabeled_iter.next()
+                # (inputs_u_w, inputs_u_s), _ = unlabeled_iter.next()
                 # error occurs ↓
-                # (inputs_u_w, inputs_u_s), _ = next(unlabeled_iter)
+                (inputs_u_w, inputs_u_s), _ = next(unlabeled_iter)
 
             data_time.update(time.time() - end)
             batch_size = inputs_x.shape[0]
@@ -363,7 +377,7 @@ def train(args, labeled_trainloader, unlabeled_trainloader, test_loader,
             logits_u_w, logits_u_s = logits[batch_size:].chunk(2)
             del logits
 
-            Lx = F.cross_entropy(logits_x, targets_x, reduction='mean')
+            Lx = F.cross_entropy(logits_x, targets_x.long(), reduction='mean')
 
             pseudo_label = torch.softmax(logits_u_w.detach()/args.T, dim=-1)
             max_probs, targets_u = torch.max(pseudo_label, dim=-1)
